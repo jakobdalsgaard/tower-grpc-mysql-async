@@ -33,6 +33,7 @@ pub mod services {
 #[derive(Clone, Debug)]
 struct SimpleServer {
   mysql_pool: mysql_async::Pool,
+  reactor_handle: Handle,
 }
 
 //
@@ -44,6 +45,7 @@ impl SimpleServer {
   fn new (mysql_url: String, reactor_handle: &Handle) -> SimpleServer 
   { 
      SimpleServer {
+       reactor_handle: reactor_handle.clone(),
        mysql_pool: mysql_async::Pool::new(mysql_url, reactor_handle),
      }
   }
@@ -82,7 +84,7 @@ fn make_grpc_error (status: tower_grpc::Status) -> tower_grpc::Error {
 
 impl services::server::SimpleService for SimpleServer {
 
-  type GetNumberFuture = Future<Item = Response<services::NumberMessage>, Error = tower_grpc::Error>; //future::FutureResult<Response<services::NumberMessage>, tower_grpc::Error>;
+  type GetNumberFuture = future::FutureResult<Response<services::NumberMessage>, tower_grpc::Error>;
 
   fn get_number (&mut self, request:Request<services::NumberMessage>) -> Self::GetNumberFuture {
 
@@ -91,7 +93,7 @@ impl services::server::SimpleService for SimpleServer {
 
     // future::err(make_grpc_error(tower_grpc::Status::INTERNAL))
     let future = self.simple_db_call(number);
-    future
+    self.reactor_handle.spawn(future)
   }
 
 }
