@@ -82,7 +82,7 @@ fn make_grpc_error (status: tower_grpc::Status) -> tower_grpc::Error {
 
 impl services::server::SimpleService for SimpleServer {
 
-  type GetNumberFuture = future::FutureResult<Response<services::NumberMessage>, tower_grpc::Error>;
+  type GetNumberFuture = Box<Future<Item = Response<services::NumberMessage>, Error = tower_grpc::Error>>; //future::FutureResult<Response<services::NumberMessage>, tower_grpc::Error>;
 
   fn get_number (&mut self, request:Request<services::NumberMessage>) -> Self::GetNumberFuture {
 
