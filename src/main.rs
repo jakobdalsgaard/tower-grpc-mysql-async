@@ -48,6 +48,28 @@ impl SimpleServer {
      }
   }
 
+
+  //
+  // Implement DB call and return 'impl Future'
+  //
+  fn simple_db_call (&mut self, number: u32) -> impl Future<Item = Response<services::NumberMessage>, Error = tower_grpc::Error> {
+    // get the mysql connection
+    let connection = self.mysql_pool.get_conn();
+
+    // take connection and executre query, map error into grpc
+    let query = connection.and_then(|conn| conn.prep_exec("SELECT :number AS TEST", params!{ number} ));
+
+    // get result set and reduce it
+    let result = query.and_then(|result| result.reduce_and_drop(0u32, |mut _lastval, row| {
+          let (res,) : (u32,) = mysql_async::from_row(row);
+          res
+        })).map_err(|_| make_grpc_error(tower_grpc::Status::INTERNAL));
+
+    result.then(|result| match result {
+        Ok(result) => futures::future::ok(Response::new(services::NumberMessage { number: 0 })),
+        Err(e) => futures::future::err(make_grpc_error(tower_grpc::Status::INTERNAL)),
+    })
+  }
 }
 
 //
@@ -67,19 +89,9 @@ impl services::server::SimpleService for SimpleServer {
     // fetch the number from the incoming request
     let number = request.into_inner().number;
 
-    // get the mysql connection
-    let connection = self.mysql_pool.get_conn();
-
-    // take connection and executre query, map error into grpc
-    let query = connection.and_then(|conn| conn.prep_exec("SELECT :number AS TEST", params!{ number} ));
-
-    // get result set and reduce it
-    let result = query.and_then(|result| result.reduce_and_drop(0u32, |mut lastval, mut row| {
-          let (res,) : (u32,) = mysql_async::from_row(row);
-          res
-        }));
-
-    future::err(make_grpc_error(tower_grpc::Status::INTERNAL))
+    // future::err(make_grpc_error(tower_grpc::Status::INTERNAL))
+    let future = self.simple_db_call(number);
+    future
   }
 
 }
